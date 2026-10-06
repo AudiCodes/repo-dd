@@ -7,11 +7,11 @@ VERDICT   OVERSOLD
           live product is real, the "no admin key" claim is false
 
 RED FLAGS
-  - upgrade authority sits in the deployer's wallet tree
+  - the program's upgrade authority is the deployer wallet
   - first bundle took 19% at launch, holds 3% now
 
 CLAIMS    1 hold, 1 partial, 1 false, 1 unverifiable
-  ✗ no admin key         program upgradeable, authority in dev tree
+  ✗ no admin key         program upgradeable, authority is the deployer
   ~ live on mainnet      program deployed, 41 txs total
   ? audited              no report published
   ✓ open source          repo builds the deployed program
@@ -84,14 +84,14 @@ The skill triggers on its own when you send a CA or a link. You can also call it
 What happens next:
 
 1. **Within about 10 seconds, a first read.** Market cap, the deployer, who is posting the CA, how much of the supply the launch bundle took and still holds, and the one fact that matters most so far. Anything that changes the call (a serial launcher, a copycat of a bigger token, a bundle that already sold) is said the moment it is found.
-2. **In 10 to 90 seconds, the full card.** A launch spread across hundreds of wallets can take a few minutes to map in full. Every claim the project makes, each marked holds, partial, false or unverifiable, with the evidence. Plus the deployer and its funding, the first-bundle wallet tree, the website's builder platform, and whether the code is a copy.
+2. **In 10 to 60 seconds, the full card.** Every claim the project makes, each marked holds, partial, false or unverifiable, with the evidence. Plus the deployer and its funding, the launch bundle, the website's builder platform, and whether the code is a copy.
 3. **Then a `TRIED` block.** Claude uses the product itself, up to the point of a wallet signature, and reports what would stop a new user, such as a broken flow or a capped payout.
 
 For a token with no tech behind it, ask "what's the narrative" instead. Claude pulls every X post naming the CA, biggest accounts first, with copy-paste bot posts collapsed into one line.
 
 ## What it checks
 
-- **On-chain:** the deployer, its past launches and how they ended, who funded it, the first-bundle wallet tree and how much of it has sold, program upgrade authorities, and holder overlap with known team wallets. Solana, Base and Robinhood Chain.
+- **On-chain:** the deployer, its past launches and how they ended, who funded it, the launch bundle and how much of it has sold, program upgrade authorities, and holder overlap with known team wallets. Solana, Base and Robinhood Chain.
 - **X:** every post and X Article from the project and the dev (Articles are fetched one by one, since they never show up in timeline APIs), who is posting the CA, bot-template shill waves, and "followed by" claims.
 - **Code:** what the repo does, how much of it is AI-written, spoofed commit times, and whether it is a scrubbed copy of someone else's project.
 - **Website:** Lovable, v0, Framer, n8n and other builder-platform fingerprints.
@@ -105,14 +105,12 @@ cd ~/.claude/skills/repo-dd/scripts
 python3 dd.py <@handle | x.com link | CA | site>   # everything below, in parallel
 python3 quick.py <CA>                              # market, copycats, X, deployer, in ~3s
 python3 ca_check.py <mint>                         # Solana deployer, past launches, funding
-python3 devwatch.py <mint> --once                  # first-bundle wallet tree, got vs holds now
+python3 bundle.py <mint>                           # launch bundle: got at launch vs holds now
 python3 fomo_share.py <CA>                         # share of supply in FOMO-app wallets
 python3 evm_relation.py <token> --chain base       # EVM deployer, dev %, holder scan
 python3 wallet_claim.py <addr> --person <handle>   # "deployed by <famous person>'s wallet"?
 python3 narrative.py <CA>                          # who is pushing the CA on X
 ```
-
-Leave out `--once` and `devwatch.py` keeps running and alerts when any wallet in the dev's tree sells. Set `NTFY_TOPIC` in `.env` to get those alerts on your phone through [ntfy.sh](https://ntfy.sh).
 
 ## Speed
 
@@ -120,17 +118,16 @@ Leave out `--once` and `devwatch.py` keeps running and alerts when any wallet in
 
 | Input | Before | After |
 |---|---|---|
-| X handle, CA in bio | 57s | 23s |
-| X handle, CA in posts | 18s | 12s |
-| Project website | 169s | 90s |
-| Bare CA | 53s | 14s |
+| X handle, CA in bio | 57s | 17s |
+| X handle, CA in posts | 18s | 8s |
+| Project website | 169s | 16s |
+| Bare CA | 53s | 17s |
 
-Three changes did most of it. Supply-share and wallet-tree lookups moved from Helius's enhanced API (2 calls per second) to `getTransactionsForAddress` (100 transactions per call, 5 calls per second, paced across processes), and give identical results on the tokens tested. The chain checks now start from the X profile alone instead of waiting for every post to load. The wallet tree expands each level in parallel. On a Helius plan without `getTransactionsForAddress`, the scripts fall back to the old path automatically.
+Two changes did most of it. The supply-share lookup moved from Helius's enhanced API (2 calls per second) to `getTransactionsForAddress` (100 transactions per call, paced across processes), and gives identical results on the tokens tested. The chain and site checks now start from the X profile alone instead of waiting for every post to load. On a Helius plan without `getTransactionsForAddress`, the scripts fall back to the old path automatically.
 
 ## Known limits
 
 - Base deployer funding: Etherscan's free tier no longer covers Base, and Base Blockscout is usually behind a Cloudflare challenge, so `evm_relation.py` reports funding as not checked.
-- Wallet trees are bound by Helius rate limits: a 240-wallet tree takes about 90 seconds, and a 650-wallet sybil launch about 4 minutes. The bundle's share is reported within seconds either way.
 - `fomo_share.py` measures one trading app's wallets (fomo.family). Skip it if that flow doesn't matter to you.
 - None of this is financial advice. The card is a fast read on public evidence, and many claims can't be checked from outside.
 

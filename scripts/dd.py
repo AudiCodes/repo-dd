@@ -3,15 +3,14 @@
     python3 dd.py <@handle | x.com link | CA | site>
 
 Resolve: the X account's every post and X Article (articles never show in timeline APIs), the CA and
-the site, from whichever of them was given.
+the site, from whichever of them was given (a bare CA gets its X and site from DexScreener).
 Then at once:
   quick.py       market, copycats, who posts the CA, deployer age and %
   fomo_share.py  FOMO wallets' share of supply
-  devwatch.py    first bundle: what it got at launch vs holds now (--quick, seconds), then the full
-                 dev + bundle wallet tree (--once)
+  bundle.py      the launch bundle: what the deployer and first-slot buyers got vs hold now
   site           headers, CNAME, builder-platform fingerprint, GitHub and docs links
   programs       every Solana address in the site's HTML, JS and same-origin API that is an
-                 executable program: its upgrade authority, and whether that authority sits in the dev tree
+                 executable program, with its upgrade authority
 Sections print the moment they finish, each with its elapsed time. Articles go to data/dd/<handle>/.
 """
 import json
@@ -86,6 +85,16 @@ def x_account(handle, u):
     return "\n".join(lines), texts, urls
 
 
+def socials(ca):
+    """The project's X handle and site as DexScreener lists them, so a bare CA gets the full X and site checks."""
+    pairs = _safe(lambda: json.loads(fetch(f"https://api.dexscreener.com/latest/dex/tokens/{ca}")[0]).get("pairs")) or []
+    info = next((p["info"] for p in pairs if p.get("info")), {})
+    x = next((s["url"] for s in info.get("socials", []) if s.get("type") == "twitter"), "")
+    m = re.search(r"(?:x|twitter)\.com/([A-Za-z0-9_]+)", x)
+    handle = m.group(1) if m and m.group(1) not in ("i", "search", "home", "intent") else None  # x.com/i/communities/...
+    return handle, next((w["url"] for w in info.get("websites", [])), None)
+
+
 def site_from(urls):
     site = next((x for x in urls if x and not re.search(r"(x|twitter)\.com", x)), None)
     return _safe(lambda: fetch(site)[2]) if site and "t.co/" in site else site
@@ -131,7 +140,7 @@ def site_check(site):
     return "\n".join(lines), html, final
 
 
-def programs(html, base, tree_path):
+def programs(html, base):
     """Executable Solana programs named anywhere in the site, its JS chunks or its same-origin API."""
     texts = [html]
     js = [urllib.parse.urljoin(base, s) for s in set(re.findall(r'src="(/_next/static/[^"]+\.js|/assets/[^"]+\.js)"', html))]
@@ -148,7 +157,6 @@ def programs(html, base, tree_path):
         # data sliced to 0 bytes: a big account in the batch would otherwise blow the response limit
         accts = rpc("getMultipleAccounts", [cands[i:i + 100], {"encoding": "base64", "dataSlice": {"offset": 0, "length": 0}}])["value"]
         found += [a for a, v in zip(cands[i:i + 100], accts) if v and v.get("executable")]
-    tree = json.load(open(tree_path))["tree"] if os.path.exists(tree_path) else {}
     lines = [f"PROGRAMS: {len(found)} executable of {len(cands)} addresses (HTML, {len(js)} JS, {len(api)} API paths: {' '.join(api) or '-'})"]
     for a in found:
         v = rpc("getAccountInfo", [a, {"encoding": "jsonParsed"}])["value"]
@@ -161,9 +169,7 @@ def programs(html, base, tree_path):
             sigs = rpc("getSignaturesForAddress", [a, {"limit": 1000}])
             born = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(sigs[-1]["blockTime"])) if sigs else "?"
             auth += f", deployed {born}, {len(sigs)}{'+' if len(sigs) == 1000 else ''} txs"
-        a_key = auth.split()[2].rstrip(",") if auth.startswith("upgrade") else None
-        tie = f"  <- IN DEV TREE: {tree[a_key]['how']}" if a_key in tree else ""
-        lines.append(f"  {a}  {auth}{tie}")
+        lines.append(f"  {a}  {auth}")
     return "\n".join(lines)
 
 
@@ -201,29 +207,28 @@ def main():
     handle, ca, site = resolve(sys.argv[1])
     # the profile alone (~1s) usually carries the CA and the site, so the chain and site checks start
     # from it while the posts and articles load
-    u = socialdata(f"user/{handle}") if handle else None
+    if ca and not handle:
+        handle, listed = socials(ca)
+        site = site or listed
+    u = _safe(lambda: socialdata(f"user/{handle}")) if handle else None
+    u = u if u and u.get("id_str") else None
     if u:
         ca = ca or ca_from(u.get("description") or "")
         site = site or site_from([u.get("url")])
     html = final = None
-    dev_done = False
     with ThreadPoolExecutor(8) as ex:
         jobs = {}
 
         def start_ca_jobs():
             jobs[ex.submit(script, "quick.py", ca)] = "QUICK"
-            if ca.startswith("0x"):  # devwatch is Solana-only; on EVM the deployer + holder scan is evm_relation
+            if ca.startswith("0x"):  # bundle.py is Solana-only; on EVM the deployer + holder scan is evm_relation
                 for chain in [c for c in ("robinhood", "base") if _has_code(ca, c)]:
                     jobs[ex.submit(script, "evm_relation.py", ca, "--chain", chain)] = f"EVM {chain}"
                     jobs[ex.submit(script, "fomo_share.py", ca, "--chain", chain)] = f"FOMO {chain}"
             else:
-                # the bundle's share lands in seconds; a sybil-heavy tree can take minutes at the free key's 5/s
-                jobs[ex.submit(script, "devwatch.py", ca, "--quick")] = "BUNDLE"
-                jobs[ex.submit(script, "devwatch.py", ca, "--once", timeout=300)] = "DEV TREE"
-                jobs[ex.submit(script, "fomo_share.py", ca)] = "FOMO"  # plain RPC, so it no longer waits for the enhanced API
+                jobs[ex.submit(script, "bundle.py", ca)] = "BUNDLE"
+                jobs[ex.submit(script, "fomo_share.py", ca)] = "FOMO"
 
-        def start_programs():  # needs the site's html and the dev tree, whichever lands last
-            jobs[ex.submit(lambda: programs(html, final, f"{HERE}/data/devwatch/{ca}.json"))] = "PROGRAMS"
 
         if u:
             jobs[ex.submit(x_account, handle, u)] = "X"
@@ -258,13 +263,9 @@ def main():
                         say("CA", f"from the site: {ca}" if ca else "none on the site")
                         if ca:
                             start_ca_jobs()
-                    elif dev_done:
-                        start_programs()
+                    if ca and not ca.startswith("0x"):
+                        jobs[ex.submit(programs, html, final)] = "PROGRAMS"
                 say(name, r)
-                if name == "DEV TREE":
-                    dev_done = True
-                    if html:
-                        start_programs()
     if not ca:
         say("CA", "none found in the bio, posts, articles or site")
     print(f"\nDONE [{time.time() - T0:.0f}s]  ca={ca}  site={site}")

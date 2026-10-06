@@ -54,7 +54,7 @@ def _open(url, body=None):
 def rpc(method, params):
     body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
     urls = (HELIUS,) if method in HELIUS_ONLY else (HELIUS, PUBLIC)
-    for attempt in range(8):
+    for attempt in range(14 if method in HELIUS_ONLY else 8):  # no public fallback to absorb a 429, so wait longer
         for url in urls:
             try:
                 r = _open(url, body)

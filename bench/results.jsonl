@@ -15,3 +15,7 @@
 {"time": "2026-10-06T15:04:50", "label": "paced", "input": "https://equityperps.fun/", "marks": {"CA": 0.2, "SITE": 0.2, "QUICK": 2.3, "BUNDLE": 17.5, "FOMO": 45.4, "DEV TREE": 90.4, "PROGRAMS": 90.5, "DONE": 90.5}}
 {"time": "2026-10-06T15:09:19", "label": "paced", "input": "YYStyJ2hUuDKzGdiksimno4dZPrUsw3WM8mvw4upump", "marks": {"QUICK": 1.7, "FOMO": 21.4, "BUNDLE": 44.6, "DEV TREE": 268.8, "DONE": 268.8}}
 {"time": "2026-10-06T15:09:41", "label": "paced", "input": "Cj4TSKUjUsaAPGYSoLLqT5xLfdRUVBU7rt5ooptpump", "marks": {"BUNDLE": 0.4, "DEV TREE": 0.5, "QUICK": 2.3, "FOMO": 13.5, "DONE": 13.5}}
+{"time": "2026-10-06T15:48:05", "label": "no-tree", "input": "Deciroagent", "marks": {"SITE": 1.4, "CA": 4.7, "X": 4.7, "QUICK": 7.5, "FOMO": 7.7, "BUNDLE": 7.9, "DONE": 7.9}}
+{"time": "2026-10-06T15:48:22", "label": "no-tree", "input": "kortxfi", "marks": {"SITE": 1.2, "PROGRAMS": 1.8, "QUICK": 2.8, "BUNDLE": 4.9, "X": 7.8, "FOMO": 16.7, "DONE": 16.7}}
+{"time": "2026-10-06T15:48:38", "label": "no-tree", "input": "https://equityperps.fun/", "marks": {"CA": 0.2, "SITE": 0.2, "PROGRAMS": 0.3, "QUICK": 2.2, "BUNDLE": 8.6, "FOMO": 15.8, "DONE": 15.8}}
+{"time": "2026-10-06T15:48:55", "label": "no-tree", "input": "Cj4TSKUjUsaAPGYSoLLqT5xLfdRUVBU7rt5ooptpump", "marks": {"SITE": 1.5, "PROGRAMS": 2.2, "QUICK": 2.7, "BUNDLE": 5.0, "X": 6.9, "FOMO": 17.0, "DONE": 17.0}}

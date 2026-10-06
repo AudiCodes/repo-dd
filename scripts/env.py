@@ -10,7 +10,7 @@ def key(name):
     path = os.path.join(ROOT, ".env")
     if os.path.exists(path):
         for line in open(path):
-            k, _, v = line.partition("=")
+            k, _, v = line.strip().removeprefix("export ").partition("=")
             if k.strip() == name and v.strip():
                 return v.strip().strip("'\"")
     raise SystemExit(f"{name} is not set: export it or add it to {path} (see .env.example)")

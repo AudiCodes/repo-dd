@@ -60,7 +60,7 @@ def load():
     env = {}
     if os.path.exists(ENV):
         for line in open(ENV):
-            k, _, v = line.partition("=")
+            k, _, v = line.strip().removeprefix("export ").partition("=")
             if v.strip():
                 env[k.strip()] = v.strip().strip("'\"")
     return env
@@ -78,7 +78,8 @@ def main():
             print(f"{name}  ({'required' if required else 'optional'}: {unlocks})\n  get one at {where}")
             key = getpass.getpass("  paste it, or press Enter to skip: ").strip() if interactive else ""
             if not key:
-                print(f"  not set{'' if interactive else f': add a line {name}=<key> to {ENV}'}\n")
+                print(f"  not set{'' if interactive else f': add a line {name}=<key> to {ENV}'}"
+                      + ("" if required else " (optional, fine to skip)") + "\n")
                 continue
         ok, note = test(name, key)
         print(f"  {'✓' if ok else '✗'} {name}: {note}\n")
@@ -94,8 +95,9 @@ def main():
     skill = os.path.expanduser("~/.claude/skills/repo-dd")
     print(f"  {'✓' if os.path.realpath(skill) == ROOT else '-'} installed at {skill}"
           + ("" if os.path.realpath(skill) == ROOT else f"\n    run: ln -s {ROOT} {skill}"))
-    print("\nReady. Send Claude a CA, an x.com link or a project site." if not missing
-          else f"\nStill needed: {', '.join(missing)}. Run python3 onboard.py again once you have them.")
+    if missing:
+        sys.exit(f"\nStill needed: {', '.join(missing)}. Run python3 {os.path.abspath(__file__)} again once you have them.")
+    print("\nReady. Send Claude a CA, an x.com link or a project site.")
 
 
 if __name__ == "__main__":

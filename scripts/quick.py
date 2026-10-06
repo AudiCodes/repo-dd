@@ -8,7 +8,7 @@ All checks run at once and avoid Helius's rate-limited enhanced API:
   X           who is posting the CA: real accounts or bot/call farms; the project account's age and size
   deployer    Solana: creator, wallet age and tx count, % held. EVM (Etherscan): creator, % held,
               its funder, and whether that funder is a serial launcher (disperse batches, repeat launches)
-Lines starting with !! are the ones to read before sizing. The deep DD (ca_check, devwatch, fomo_share) comes after.
+Lines starting with !! are the ones to read before sizing. The deep DD (ca_check, bundle, fomo_share) comes after.
 """
 import json
 import sys
