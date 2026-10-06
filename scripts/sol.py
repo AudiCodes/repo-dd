@@ -23,24 +23,26 @@ HELIUS = f"https://mainnet.helius-rpc.com/?api-key={KEY}"
 PUBLIC = "https://api.mainnet-beta.solana.com"
 HELIUS_ONLY = {"getTransactionsForAddress"}
 ENHANCED_PER_SEC, BURST = 2, 5
+HISTORY_PER_SEC, HISTORY_BURST = 4.5, 40  # getTransactionsForAddress, measured 2026-10-06: burst ~50, then 5/s
 
 PACE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", ".enhanced_pace")  # shared by every process
+HISTORY_PACE = os.path.join(os.path.dirname(PACE_FILE), ".history_pace")
 os.makedirs(os.path.dirname(PACE_FILE), exist_ok=True)
 B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 P = 2 ** 255 - 19
 D = -121665 * pow(121666, P - 2, P) % P
 
 
-def _slot():
-    """Reserve the next enhanced-API slot across all processes (the key's 2/s is shared)."""
-    with open(PACE_FILE, "a+") as f:
+def _slot(path=PACE_FILE, rate=ENHANCED_PER_SEC, burst=BURST):
+    """Reserve the next slot of a rate-limited API across all processes (the key's limit is shared)."""
+    with open(path, "a+") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         f.seek(0)
         nxt = float(f.read() or 0)
         now = time.time()
-        nxt = max(nxt, now - BURST / ENHANCED_PER_SEC) + 1 / ENHANCED_PER_SEC
+        nxt = max(nxt, now - burst / rate) + 1 / rate
         f.seek(0), f.truncate(), f.write(str(nxt))
-    return nxt - 1 / ENHANCED_PER_SEC - now
+    return nxt - 1 / rate - now
 
 
 def _open(url, body=None):
@@ -129,6 +131,9 @@ def pda(seeds, program):
 
 def history(address, limit=100, token=None, encoding="json"):
     """One page of succeeded txs, newest first: {"data": [...], "paginationToken": ...}, or None if the key lacks the method."""
+    wait = _slot(HISTORY_PACE, HISTORY_PER_SEC, HISTORY_BURST)
+    if wait > 0:
+        time.sleep(wait)
     return rpc("getTransactionsForAddress", [address, {
         "transactionDetails": "full", "limit": limit, "encoding": encoding, "maxSupportedTransactionVersion": 1,
         "filters": {"status": "succeeded"}, **({"paginationToken": token} if token else {})}])

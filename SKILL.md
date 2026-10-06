@@ -21,9 +21,9 @@ All scripts live in `scripts/` inside this skill's base directory. Below, `$S` m
 
 | Script | What it does | Time |
 |---|---|---|
-| `dd.py <handle, x.com link, CA or site>` | Wave 1 in one command: resolves the rest, then runs the scripts below in parallel and prints each section as it lands | ~10-80s |
+| `dd.py <handle, x.com link, CA or site>` | Wave 1 in one command: resolves the rest, then runs the scripts below in parallel and prints each section as it lands | ~10-90s, minutes for a sybil-heavy tree |
 | `quick.py <CA>` | Market, same-ticker copycats, who posts the CA on X, deployer age and % held | ~3s |
-| `devwatch.py <mint> --once` | Deployer + first-bundle wallet tree, what the bundle got at launch vs holds now | ~5-70s |
+| `devwatch.py <mint> --quick` / `--once` | First bundle got vs holds now (~10s) / the full deployer + bundle wallet tree (~5s to minutes) | |
 | `ca_check.py <mint>` | Solana deployer, its past launches with live mcap, who funds it, origin trail | ~50s |
 | `evm_relation.py <token> --chain base\|robinhood` | EVM deployer (4337-aware), dev % held, full holder scan, `--team` overlap | ~10-70s |
 | `fomo_share.py <CA> [--chain]` | Share of supply in FOMO-app wallets (fomo.family), a retail-flow signal | ~3-40s |
@@ -36,7 +36,7 @@ All scripts live in `scripts/` inside this skill's base directory. Below, `$S` m
 Speed changes the outcome. In one real case the token went from $30k when it was sent, to $40k at the first scan, to $150k when the card landed, over a dozen serial tool calls. So:
 
 1. **First tool call, always:** `cd $S && python3 dd.py <whatever they sent>` with `run_in_background`, output to the scratchpad.
-2. **Read the output at ~5s and send a FIRST READ:** stage, the deciding fact, MC. Three to five lines.
+2. **Read the output at ~10s and send a FIRST READ:** stage, the deciding fact, MC, and the BUNDLE line (what the first bundle got vs holds now). Three to five lines. Don't wait for DEV TREE: on a sybil-heavy launch it takes minutes.
 3. Read the X Articles dd.py saved to `scripts/data/dd/<handle>/`, then test their specifics against the PROGRAMS and DEV TREE sections. Send the full card. Hand-run checks only for what dd.py doesn't cover (repo clone, product try).
 4. Never trace funding hops, program authorities or bundles by hand: dd.py already did it.
 

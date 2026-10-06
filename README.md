@@ -22,6 +22,18 @@ CLAIMS    1 hold, 1 partial, 1 false, 1 unverifiable
 
 You need [Claude Code](https://claude.com/claude-code) and Python 3.9 or newer. There is nothing to `pip install`: the scripts use only the standard library.
 
+### Set up with Claude
+
+Paste this into Claude Code:
+
+```
+Install the repo-dd skill from https://github.com/AudiCodes/repo-dd and walk me through the setup.
+```
+
+Claude clones it, follows [Setup steps for Claude](#setup-steps-for-claude) below, and asks you for each API key with a link to get it.
+
+### Set up by hand
+
 1. Clone the repo into your skills folder:
 
    ```sh
@@ -49,6 +61,13 @@ You need [Claude Code](https://claude.com/claude-code) and Python 3.9 or newer. 
 
 `gh` (GitHub CLI) and `dig` are used when installed. Without them, the repo and DNS checks are skipped.
 
+### Setup steps for Claude
+
+1. `git clone https://github.com/AudiCodes/repo-dd ~/.claude/skills/repo-dd`. If that folder already exists, ask the user before touching it.
+2. Run `python3 ~/.claude/skills/repo-dd/onboard.py`. Without a terminal it asks nothing: it tests the keys already in `.env` and lists the missing ones with where to get each.
+3. For each missing required key (`HELIUS_API_KEY`, `SOCIALDATA_API_KEY`), give the user the signup link from the table above and ask them to paste the key. Tell them they can instead add it to `~/.claude/skills/repo-dd/.env` themselves if they'd rather not paste it into the chat. Write each key as a `NAME=value` line in that `.env`, then run `onboard.py` again. Offer the optional keys once.
+4. When `onboard.py` prints `Ready`, tell the user to restart Claude Code, then send a CA or an x.com link to try it.
+
 ## Using it
 
 Paste one of these into Claude Code:
@@ -64,8 +83,8 @@ The skill triggers on its own when you send a CA or a link. You can also call it
 
 What happens next:
 
-1. **Within about 10 seconds, a first read.** Market cap, the deployer, who is posting the CA, and the one fact that matters most so far. Anything that changes the call (a serial launcher, a copycat of a bigger token, a bundle that already sold) is said the moment it is found.
-2. **In 10 to 80 seconds, the full card.** Every claim the project makes, each marked holds, partial, false or unverifiable, with the evidence. Plus the deployer and its funding, the first-bundle wallet tree, the website's builder platform, and whether the code is a copy.
+1. **Within about 10 seconds, a first read.** Market cap, the deployer, who is posting the CA, how much of the supply the launch bundle took and still holds, and the one fact that matters most so far. Anything that changes the call (a serial launcher, a copycat of a bigger token, a bundle that already sold) is said the moment it is found.
+2. **In 10 to 90 seconds, the full card.** A launch spread across hundreds of wallets can take a few minutes to map in full. Every claim the project makes, each marked holds, partial, false or unverifiable, with the evidence. Plus the deployer and its funding, the first-bundle wallet tree, the website's builder platform, and whether the code is a copy.
 3. **Then a `TRIED` block.** Claude uses the product itself, up to the point of a wallet signature, and reports what would stop a new user, such as a broken flow or a capped payout.
 
 For a token with no tech behind it, ask "what's the narrative" instead. Claude pulls every X post naming the CA, biggest accounts first, with copy-paste bot posts collapsed into one line.
@@ -101,17 +120,17 @@ Leave out `--once` and `devwatch.py` keeps running and alerts when any wallet in
 
 | Input | Before | After |
 |---|---|---|
-| X handle, CA in bio | 57s | 17s |
-| X handle, CA in posts | 18s | 11s |
-| Project website | 169s | 79s |
-| Bare CA | 53s | 15s |
+| X handle, CA in bio | 57s | 23s |
+| X handle, CA in posts | 18s | 12s |
+| Project website | 169s | 90s |
+| Bare CA | 53s | 14s |
 
-Three changes did most of it. Supply-share and wallet-tree lookups moved from Helius's enhanced API (2 calls per second) to `getTransactionsForAddress` (100 transactions per plain RPC call), and give identical results on the tokens tested. The chain checks now start from the X profile alone instead of waiting for every post to load. The wallet tree expands each level in parallel. On a Helius plan without `getTransactionsForAddress`, the scripts fall back to the old path automatically.
+Three changes did most of it. Supply-share and wallet-tree lookups moved from Helius's enhanced API (2 calls per second) to `getTransactionsForAddress` (100 transactions per call, 5 calls per second, paced across processes), and give identical results on the tokens tested. The chain checks now start from the X profile alone instead of waiting for every post to load. The wallet tree expands each level in parallel. On a Helius plan without `getTransactionsForAddress`, the scripts fall back to the old path automatically.
 
 ## Known limits
 
 - Base deployer funding: Etherscan's free tier no longer covers Base, and Base Blockscout is usually behind a Cloudflare challenge, so `evm_relation.py` reports funding as not checked.
-- On a free Helius key (about 10 calls per second), large wallet trees take about a minute.
+- Wallet trees are bound by Helius rate limits: a 240-wallet tree takes about 90 seconds, and a 650-wallet sybil launch about 4 minutes. The bundle's share is reported within seconds either way.
 - `fomo_share.py` measures one trading app's wallets (fomo.family). Skip it if that flow doesn't matter to you.
 - None of this is financial advice. The card is a fast read on public evidence, and many claims can't be checked from outside.
 

@@ -3,6 +3,7 @@
     python3 onboard.py
 
 Run it again any time as a health check. Keys already in .env or the environment are tested, not asked for.
+Without a terminal (Claude running it for you), it asks nothing: it tests what is in .env and lists what is missing.
 """
 import getpass
 import json
@@ -69,14 +70,15 @@ def main():
     if sys.version_info < (3, 9):
         sys.exit("Python 3.9 or newer is needed")
     env = load()
+    interactive = sys.stdin.isatty()
     print("repo-dd setup\n")
     for name, required, where, unlocks in KEYS:
         key = os.environ.get(name) or env.get(name)
         if not key:
             print(f"{name}  ({'required' if required else 'optional'}: {unlocks})\n  get one at {where}")
-            key = getpass.getpass("  paste it, or press Enter to skip: ").strip()
+            key = getpass.getpass("  paste it, or press Enter to skip: ").strip() if interactive else ""
             if not key:
-                print("  skipped\n")
+                print(f"  not set{'' if interactive else f': add a line {name}=<key> to {ENV}'}\n")
                 continue
         ok, note = test(name, key)
         print(f"  {'✓' if ok else '✗'} {name}: {note}\n")

@@ -7,7 +7,8 @@ the site, from whichever of them was given.
 Then at once:
   quick.py       market, copycats, who posts the CA, deployer age and %
   fomo_share.py  FOMO wallets' share of supply
-  devwatch.py    dev + first-bundle wallet tree, what the bundle got vs holds now (--once)
+  devwatch.py    first bundle: what it got at launch vs holds now (--quick, seconds), then the full
+                 dev + bundle wallet tree (--once)
   site           headers, CNAME, builder-platform fingerprint, GitHub and docs links
   programs       every Solana address in the site's HTML, JS and same-origin API that is an
                  executable program: its upgrade authority, and whether that authority sits in the dev tree
@@ -216,7 +217,9 @@ def main():
                     jobs[ex.submit(script, "evm_relation.py", ca, "--chain", chain)] = f"EVM {chain}"
                     jobs[ex.submit(script, "fomo_share.py", ca, "--chain", chain)] = f"FOMO {chain}"
             else:
-                jobs[ex.submit(script, "devwatch.py", ca, "--once")] = "DEV TREE"
+                # the bundle's share lands in seconds; a sybil-heavy tree can take minutes at the free key's 5/s
+                jobs[ex.submit(script, "devwatch.py", ca, "--quick")] = "BUNDLE"
+                jobs[ex.submit(script, "devwatch.py", ca, "--once", timeout=300)] = "DEV TREE"
                 jobs[ex.submit(script, "fomo_share.py", ca)] = "FOMO"  # plain RPC, so it no longer waits for the enhanced API
 
         def start_programs():  # needs the site's html and the dev tree, whichever lands last
