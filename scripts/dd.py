@@ -143,7 +143,15 @@ def site_check(site):
 def programs(html, base):
     """Executable Solana programs named anywhere in the site, its JS chunks or its same-origin API."""
     texts = [html]
-    js = [urllib.parse.urljoin(base, s) for s in set(re.findall(r'src="(/_next/static/[^"]+\.js|/assets/[^"]+\.js)"', html))]
+    # the app often lives on a sibling subdomain (app.x.io next to x.io): its pages carry the on-chain addresses
+    root = ".".join(urllib.parse.urlsplit(base).hostname.split(".")[-2:])
+    sib = {u.rstrip("/") for u in re.findall(rf'https://[a-z0-9-]+\.{re.escape(root)}/[^"\'\s<>)]*', html)
+           if urllib.parse.urlsplit(u).hostname != urllib.parse.urlsplit(base).hostname}
+    with ThreadPoolExecutor(10) as ex:
+        pages = [(u, t) for u, t in zip(sib, ex.map(lambda u: _safe(lambda: fetch(u)[0]), list(sib)[:10])) if t]
+    texts += [t for _, t in pages]
+    js = [urllib.parse.urljoin(b, s) for b, h in [(base, html)] + pages
+          for s in set(re.findall(r'src="(/_next/static/[^"]+\.js|/assets/[^"]+\.js)"', h))]
     docs = [urllib.parse.urljoin(base, p) for p in set(re.findall(r'href="(/docs[^"#?]*)"', html))]
     with ThreadPoolExecutor(10) as ex:
         texts += [t for t in ex.map(lambda u: _safe(lambda: fetch(u)[0]), js[:40] + docs[:25]) if t]
@@ -154,12 +162,18 @@ def programs(html, base):
     # native programs (…1111) and the token programs ship in every web3.js bundle: only the project's own programs matter
     cands = sorted({a for t in texts for a in B58.findall(t) if _pubkey(a) and not a.endswith("1111111")
                     and not a.startswith(("Token", "So111", "ATokenGP", "Sysvar", "ComputeBudget", "metaq"))})
-    found = []
+    found, owners = [], set()
     for i in range(0, len(cands), 100):
         # data sliced to 0 bytes: a big account in the batch would otherwise blow the response limit
         accts = rpc("getMultipleAccounts", [cands[i:i + 100], {"encoding": "base64", "dataSlice": {"offset": 0, "length": 0}}])["value"]
         found += [a for a, v in zip(cands[i:i + 100], accts) if v and v.get("executable")]
-    lines = [f"PROGRAMS: {len(found)} executable of {len(cands)} addresses (HTML, {len(js)} JS, {len(api)} API paths: {' '.join(api) or '-'})"]
+        owners.update(v["owner"] for v in accts if v and not v.get("executable"))
+    # pools and vaults the app names are data accounts: the program that owns them is the one that runs the money
+    owners = sorted(o for o in owners if o not in found and not o.endswith("1111111") and not o.startswith(("Token", "ATokenGP")))
+    if owners:
+        accts = rpc("getMultipleAccounts", [owners, {"encoding": "base64", "dataSlice": {"offset": 0, "length": 0}}])["value"]
+        found += [o for o, v in zip(owners, accts) if v and v.get("executable")]
+    lines = [f"PROGRAMS: {len(found)} executable of {len(cands)} addresses (HTML, {len(pages)} app pages, {len(js)} JS, {len(api)} API paths: {' '.join(api) or '-'})"]
     for a in found:
         v = rpc("getAccountInfo", [a, {"encoding": "jsonParsed"}])["value"]
         info = (v["data"].get("parsed") or {}).get("info", {}) if isinstance(v["data"], dict) else {}
@@ -172,8 +186,11 @@ def programs(html, base):
             if sigs is None:  # the RPC refused (too busy an account, or rate limited): say so instead of guessing
                 auth += ", history unavailable"
             else:
-                born = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(sigs[-1]["blockTime"])) if sigs else "?"
-                auth += f", deployed {born}, {len(sigs)}{'+' if len(sigs) == 1000 else ''} txs"
+                if len(sigs) == 1000:  # the oldest of the last 1000 is not the deploy: a busy program is an established one
+                    auth += ", 1000+ txs, established program"
+                else:
+                    born = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(sigs[-1]["blockTime"])) if sigs else "?"
+                    auth += f", deployed {born}, {len(sigs)} txs"
         lines.append(f"  {a}  {auth}")
     return "\n".join(lines)
 

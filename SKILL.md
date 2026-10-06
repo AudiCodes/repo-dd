@@ -31,6 +31,13 @@ All scripts live in `scripts/` inside this skill's base directory. Below, `$S` m
 | `wallet_claim.py <addr> --chain <c> --person <handle>` | "Deployed by <famous person>'s wallet": 7702 delegates, sweeper bots, public ties | ~2s |
 | `narrative.py <CA> [--ticker X]` | Every X post naming the CA, biggest account first, bot templates collapsed | ~5s |
 
+## Hard time budget
+
+- **The first read goes out as text the moment dd.py prints QUICK and BUNDLE (~5s).** No other tool call comes before it.
+- **The full card goes out the moment dd.py prints DONE (~30s).** Build it from dd.py's output only.
+- **Hand checks come after the card**, as a short `ADDED` follow-up. Examples: the app's own API, vault balances, agent states.
+- If dd.py is missing a section, say so under Unchecked. Never fill the gap by hand before the card.
+
 ## First read in 60 seconds
 
 Speed changes the outcome. In one real case the token went from $30k when it was sent, to $40k at the first scan, to $150k when the card landed, over a dozen serial tool calls. So:
