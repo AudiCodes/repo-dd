@@ -151,7 +151,9 @@ def programs(html, base):
     api = sorted(api | {f"{p}/config" for p in api})[:30]  # an app API usually exposes its program IDs at /config
     with ThreadPoolExecutor(10) as ex:
         texts += [t for t in ex.map(lambda p: _safe(lambda: fetch(urllib.parse.urljoin(base, p), 8)[0]), api) if t]
-    cands = sorted({a for t in texts for a in B58.findall(t) if _pubkey(a) and not a.startswith(("1111", "Token", "So111", "ATokenGP", "Sysvar", "ComputeBudget"))})
+    # native programs (…1111) and the token programs ship in every web3.js bundle: only the project's own programs matter
+    cands = sorted({a for t in texts for a in B58.findall(t) if _pubkey(a) and not a.endswith("1111111")
+                    and not a.startswith(("Token", "So111", "ATokenGP", "Sysvar", "ComputeBudget", "metaq"))})
     found = []
     for i in range(0, len(cands), 100):
         # data sliced to 0 bytes: a big account in the batch would otherwise blow the response limit
@@ -167,8 +169,11 @@ def programs(html, base):
             auth = (pd["data"].get("parsed") or {}).get("info", {}).get("authority") if isinstance(pd["data"], dict) else None
             auth = f"upgrade authority {auth}" if auth else "immutable (authority burned)"
             sigs = rpc("getSignaturesForAddress", [a, {"limit": 1000}])
-            born = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(sigs[-1]["blockTime"])) if sigs else "?"
-            auth += f", deployed {born}, {len(sigs)}{'+' if len(sigs) == 1000 else ''} txs"
+            if sigs is None:  # the RPC refused (too busy an account, or rate limited): say so instead of guessing
+                auth += ", history unavailable"
+            else:
+                born = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(sigs[-1]["blockTime"])) if sigs else "?"
+                auth += f", deployed {born}, {len(sigs)}{'+' if len(sigs) == 1000 else ''} txs"
         lines.append(f"  {a}  {auth}")
     return "\n".join(lines)
 
