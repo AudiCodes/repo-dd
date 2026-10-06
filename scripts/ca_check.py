@@ -2,12 +2,16 @@
 
     python3 ca_check.py <mint> [--scan 1000] [--hops 3]
 
-Deployer: pump.fun keeps the creator in the bonding-curve account (offset 49),
-one call. Other mints fall back to the fee payer of the mint's oldest tx.
+Deployer: Jupiter's dev field (the wallet that minted). pump.fun's bonding-curve
+creator (offset 49) is only the fee recipient and can be handed to another
+wallet, so it is printed when it differs and used when Jupiter has no dev.
+Other mints fall back to the fee payer of the mint's oldest tx.
 
 Past deploys: every CREATE in the deployer's last --scan transactions, from
 Helius parsed history (its labels caught 12 launches where hand-parsing
-instructions caught 5). The output says when the scan cap fired.
+instructions caught 5). The output says when the scan cap fired. Each launch
+gets its peak market cap from Jupiter's daily mcap candles, and the best one
+is named: a dev whose earlier coin ran to millions has done it before.
 
 Funding: who sent the dev SOL (plain transfers >= 0.05 SOL) in that window,
 each funder profiled one hop back; then the dev wallet's origin: its first
@@ -60,10 +64,21 @@ def when(ts):
 
 def deployer(mint):
     acct = rpc("getAccountInfo", [pda([b"bonding-curve", b58decode(mint)], PUMP), {"encoding": "base64"}])
+    curve = None
     if acct and acct.get("value"):
         data = base64.b64decode(acct["value"]["data"][0])
         if len(data) >= 81 and any(data[49:81]):  # curves from before pump.fun stored the creator hold zeros here
-            return b58encode(data[49:81]), "pump.fun bonding curve"
+            curve = b58encode(data[49:81])
+    # the curve's creator field is the fee recipient, which the dev can hand to another wallet; Jupiter keeps the minter
+    try:
+        dev = fetch(f"https://datapi.jup.ag/v1/assets/search?query={mint}")[0].get("dev")
+    except Exception:
+        dev = None
+    if dev:
+        moved = f"; bonding-curve creator is now {curve}, creator fees handed off" if curve and curve != dev else ""
+        return dev, "Jupiter dev" + moved
+    if curve:
+        return curve, "pump.fun bonding curve"
     # the metadata account is written once at launch, so its oldest tx is the create even on a mint with millions of txs
     sigs = rpc("getSignaturesForAddress", [pda([b"metadata", b58decode(META), b58decode(mint)], META), {"limit": 1000}])
     how = "fee payer of the metadata create"
@@ -108,6 +123,21 @@ def names(mints):
     return out
 
 
+def peak(mint):
+    """Highest daily-candle market cap Jupiter has for the mint and the day it printed, or None if it never traded."""
+    url = (f"https://datapi.jup.ag/v2/charts/{mint}?interval=1_DAY&to={int(time.time() * 1000)}"
+           "&candles=1000&type=mcap&quote=usd")
+    try:
+        top = max(fetch(url)["candles"], key=lambda c: c["high"])
+    except Exception:
+        return None
+    return top["high"], top["time"]
+
+
+def usd(x):
+    return f"${x / 1e9:.2f}B" if x >= 1e9 else f"${x / 1e6:.2f}M" if x >= 1e6 else f"${x / 1e3:.0f}k"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("mint")
@@ -123,19 +153,33 @@ def main():
 
     txs, capped = history(dev, a.scan)
     span = f"{when(txs[-1]['timestamp'])} to {when(txs[0]['timestamp'])}" if txs else ""
-    launches = []
+    launches = {}  # mint -> launch; history is newest first, so the last write is the original create
     for t in txs:
         if t["type"] == "CREATE" and not t.get("transactionError"):
             mints = [x["mint"] for x in t.get("tokenTransfers") or [] if x.get("mint")]
             if mints:
-                launches.append({"mint": mints[0], "time": t["timestamp"], "via": t["source"]})
+                launches[mints[0]] = {"mint": mints[0], "time": t["timestamp"], "via": t["source"]}
+    launches = sorted(launches.values(), key=lambda l: -l["time"])
     meta = names([l["mint"] for l in launches])
+    with ThreadPoolExecutor(16) as pool:
+        peaks = dict(zip([l["mint"] for l in launches], pool.map(peak, [l["mint"] for l in launches])))
     alive = sum(1 for l in launches if l["mint"] in meta and meta[l["mint"]]["mcap"] >= 50_000)
-    print(f"\nPAST DEPLOYS: {len(launches)} in last {len(txs)} txs ({span}); {alive} above $50k mcap now"
-          + ("  [scan cap hit, older launches not checked]" if capped else ""))
+    big = sum(1 for p in peaks.values() if p and p[0] >= 1_000_000)
+    print(f"\nPAST DEPLOYS: {len(launches)} in last {len(txs)} txs ({span}); {alive} above $50k mcap now, "
+          f"{big} peaked above $1M" + ("  [scan cap hit, older launches not checked]" if capped else ""))
+    best = max((l for l in launches if peaks[l["mint"]] and l["mint"] != a.mint),
+               key=lambda l: peaks[l["mint"]][0], default=None)
+    if best:
+        m, (hi, day) = meta.get(best["mint"]), peaks[best["mint"]]
+        now = usd(m["mcap"]) if m else "no live pair"
+        print(f"  BEST PRIOR LAUNCH: {m['symbol'] if m else best['mint']} peaked {usd(hi)} on {when(day)[:10]}, "
+              f"now {now}  ({best['mint']}, launched {when(best['time'])[:10]})")
+    else:
+        print("  BEST PRIOR LAUNCH: no other launch with a trading history in the scan")
     for l in launches[:25]:
-        m = meta.get(l["mint"])
+        m, p = meta.get(l["mint"]), peaks[l["mint"]]
         tag = f"{m['symbol']}  mcap ${m['mcap']:,.0f}" if m else "no live pair (dead or never traded)"
+        tag += f"  peak {usd(p[0])}" if p else ""
         mark = "  <- this token" if l["mint"] == a.mint else ""
         print(f"  {when(l['time'])}  {l['mint']}  {l['via']}  {tag}{mark}")
     if len(launches) > 25:

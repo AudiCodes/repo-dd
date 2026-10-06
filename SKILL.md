@@ -24,7 +24,7 @@ All scripts live in `scripts/` inside this skill's base directory. Below, `$S` m
 | `dd.py <handle, x.com link, CA or site>` | Wave 1 in one command: resolves the rest, then runs the scripts below in parallel and prints each section as it lands | ~10-60s |
 | `quick.py <CA>` | Market, same-ticker copycats, who posts the CA on X, deployer age and % held | ~3s |
 | `bundle.py <mint>` | The launch bundle: what the deployer and first-slot buyers got at launch vs hold now | ~10s |
-| `ca_check.py <mint>` | Solana deployer, its past launches with live mcap, who funds it, origin trail | ~50s |
+| `ca_check.py <mint>` | Solana deployer, its past launches with live and peak mcap plus the best prior launch, who funds it, origin trail | ~50s |
 | `evm_relation.py <token> --chain base\|robinhood` | EVM deployer (4337-aware), dev % held, full holder scan, `--team` overlap | ~10-70s |
 | `fomo_share.py <CA> [--chain]` | Share of supply in FOMO-app wallets (fomo.family), a retail-flow signal | ~3-40s |
 | `xcheck.py --who h1,h2 --ca <CA> [--q ".."]` | X API: each handle's last post time and recent posts, 7-day search | ~1s |
@@ -100,9 +100,9 @@ Lead with the fact that validates or kills the claim, not a list of worries. Put
    Also note stock copy, placeholder text and dead links. Say whether the "product" is just the site.
 8. **Copy of another project.** Read every README and credit line in the project's repos, including repos holding its output, and check git history for removed attribution lines. In one case the engine was another developer's open-source tool, credited in one README and scrubbed from two others. Search GitHub for 2-3 distinctive function names, strings or contract names. Check `fork`/`parent` in the API. For contracts, diff against the likely upstream. Never call something original without having searched for the upstream.
 9. **Deployer, past deploys, funding. Runs on every CA, and on every repo once its CA turns up. No CA anywhere: say so under Unchecked.**
-   - Solana: `python3 ca_check.py <mint>` in the background. Deployer (pump.fun bonding-curve creator, else the metadata create's fee payer), every launch in the dev's recent history with live mcap, who sends the dev SOL with each funder profiled one hop back, and the dev wallet's origin trail.
+   - Solana: `python3 ca_check.py <mint>` in the background. Deployer (Jupiter's dev, else the pump.fun bonding-curve creator, else the metadata create's fee payer), every launch in the dev's recent history with live mcap and peak mcap, the best prior launch, who sends the dev SOL with each funder profiled one hop back, and the dev wallet's origin trail.
    - EVM: `python3 evm_relation.py <token> --chain base|robinhood`. Deployer (resolving 4337 EntryPoint launches to the user-op sender), dev % held, every address that touched the token. Add `--team 0x..,0x..` for known project or partner wallets. "no mint in the last N blocks" means an older token: rerun with a bigger `--lookback`. For past deploys, `eth_getLogs` on the launchpad factory address and match the creator.
-   - The point is links to teams and partnerships. For the deployer and each funder: does it appear in the project's, a team member's or a known protocol's wallets, ENS/SNS names, X posts, GitHub, or prior launches by the same team? A known team treasury or VC wallet supports the claim; a serial pump.fun deployer with many dead launches is a red flag. Say which, with the address.
+   - The point is links to teams and partnerships. For the deployer and each funder: does it appear in the project's, a team member's or a known protocol's wallets, ENS/SNS names, X posts, GitHub, or prior launches by the same team? A known team treasury or VC wallet supports the claim; a serial pump.fun deployer with many dead launches is a red flag. A prior launch that peaked in the millions is a strong plus: this dev has run one before. Put it in the Deployer line. Say which, with the address.
    - Deployer and bundle wallets at ~0% soon after launch means the team has no skin in the game: a red flag, never "no overhang". Dev supply on its own is one line, not a headline; bundles stay a red flag.
 
 ## Try the product (every tech play)
@@ -143,7 +143,7 @@ CLAIMS    <X> hold, <Y> partial, <Z> false, <W> unverifiable
   ✓ <claim, short>       <evidence, short>
 
 Token     <linked/unlinked/contradicts>: <how>
-Deployer  <addr>, holds <X>%, <N> launches (<M> dead), funded by <who>
+Deployer  <addr>, holds <X>%, <N> launches (<M> dead), best prior <SYM> peaked $<P>, funded by <who>
 FOMO      <X>% of supply in <N> FOMO wallets
 Team link <link found, or none found>
 Dev       <who, account age, identity leaks>
