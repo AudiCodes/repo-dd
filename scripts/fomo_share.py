@@ -57,7 +57,7 @@ def on_curve(addr):
 
 
 def solana(mint):
-    from sol import enhanced, rpc
+    from sol import enhanced, history, rpc
     program = rpc("getAccountInfo", [mint, {"encoding": "base64"}])["value"]["owner"]  # Token or Token-2022
     filters = [{"memcmp": {"offset": 0, "bytes": mint}}] + ([{"dataSize": 165}] if program.startswith("Tokenkeg") else [])
     holders = {}
@@ -67,8 +67,24 @@ def solana(mint):
             holders[i["owner"]] = holders.get(i["owner"], 0) + float(i["tokenAmount"]["uiAmount"])
     supply = float(rpc("getTokenSupply", [mint])["value"]["uiAmount"])
 
-    # the mint's parsed history, 100 txs a call: every wallet whose tx FOMO's paymaster paid for is a FOMO wallet
-    fomo, before, seen = set(), "", 0
+    # the mint's history, 100 txs a call: every wallet whose tx FOMO's paymaster paid for is a FOMO wallet.
+    # getTransactionsForAddress is plain RPC (~4x faster, and off the 2/s enhanced bucket); keys without it use enhanced pages
+    fomo, token, seen = set(), None, 0
+    for _ in range(MAX_PAGES):
+        r = history(mint, token=token)
+        if r is None:
+            break
+        for t in r["data"]:
+            if t["transaction"]["message"]["accountKeys"][0] == PAYMASTER:
+                fomo |= {b["owner"] for b in t["meta"]["preTokenBalances"] + t["meta"]["postTokenBalances"] if b["mint"] == mint}
+        seen += len(r["data"])
+        token = r.get("paginationToken")
+        if not token or len(r["data"]) < 100:
+            return holders, {h: h in fomo and on_curve(h) for h in holders}, supply, seen
+    if seen:
+        return holders, {h: h in fomo and on_curve(h) for h in holders}, supply, seen
+
+    before = ""
     for _ in range(MAX_PAGES):
         page = enhanced(f"addresses/{mint}/transactions", limit=100, before=before)
         for t in page:

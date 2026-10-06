@@ -1,6 +1,6 @@
 # repo-dd
 
-A Claude Code skill for due diligence on crypto tokens and the tech projects behind them. Paste a contract address, an X post, a GitHub link or a project site, and Claude finds the rest (X account, site, repo, CA), checks every claim the project makes, and returns a one-screen card with the verdict on the first line. An illustrative card:
+A Claude Code skill for due diligence on crypto tokens and the tech projects behind them. Send Claude a contract address, an X post, a GitHub link or a project site. Claude finds the rest (X account, site, repo, CA), checks every claim the project makes, and returns a one-screen card with the verdict on the first line. An illustrative card:
 
 ```
 VERDICT   OVERSOLD
@@ -18,34 +18,64 @@ CLAIMS    1 hold, 1 partial, 1 false, 1 unverifiable
 ...
 ```
 
-## What it checks
-
-- **On-chain:** the deployer, its past launches and how they ended, who funded it, the first-bundle wallet tree and how much of it has already sold, program upgrade authorities, and holder overlap with known team wallets. Solana, Base and Robinhood Chain.
-- **X:** every post and X Article from the project and the dev (fetched one by one, since Articles never show up in timeline APIs), who is posting the CA, bot-template shill waves, and "followed by" claims.
-- **Code:** what the repo does, how much of it is AI-written, spoofed commit times, and whether it is a scrubbed copy of someone else's project.
-- **Website:** Lovable, v0, Framer, n8n and other builder-platform fingerprints.
-- **The product:** Claude uses it up to the point of a wallet signature and reports whether anyone has a reason to use it.
-
-`scripts/dd.py` runs the first wave in parallel and prints each section as it finishes. On a fresh pump.fun token the full run takes about 30 seconds.
-
 ## Install
 
-```sh
-git clone https://github.com/AudiCodes/repo-dd ~/.claude/skills/repo-dd
-cp ~/.claude/skills/repo-dd/.env.example ~/.claude/skills/repo-dd/.env
-# then fill in the keys
+You need [Claude Code](https://claude.com/claude-code) and Python 3.9 or newer. There is nothing to `pip install`: the scripts use only the standard library.
+
+1. Clone the repo into your skills folder:
+
+   ```sh
+   git clone https://github.com/AudiCodes/repo-dd ~/.claude/skills/repo-dd
+   ```
+
+2. Run the onboarding script:
+
+   ```sh
+   python3 ~/.claude/skills/repo-dd/onboard.py
+   ```
+
+   It asks for each API key, tests it with one live call, and saves it to `.env` in the skill folder (readable only by you). Press Enter to skip an optional key. Run it again any time to check that every key still works.
+
+3. Restart Claude Code so it picks up the new skill.
+
+### API keys
+
+| Key | Needed for | Cost | Get one |
+|---|---|---|---|
+| `HELIUS_API_KEY` | every Solana check | free tier works | [dashboard.helius.dev](https://dashboard.helius.dev) |
+| `SOCIALDATA_API_KEY` | X posts, X Articles, who is posting the CA | about $0.0002 per item, a few cents per DD | [socialdata.tools](https://socialdata.tools) |
+| `ETHERSCAN_API_KEY` | optional: EVM deployer history | free on Ethereum and Robinhood Chain | [etherscan.io/apis](https://etherscan.io/apis) |
+| `X_BEARER_TOKEN` | optional: `xcheck.py`, `wallet_claim.py` | X API pay per use | [developer.x.com](https://developer.x.com) |
+
+`gh` (GitHub CLI) and `dig` are used when installed. Without them, the repo and DNS checks are skipped.
+
+## Using it
+
+Paste one of these into Claude Code:
+
+```
+<a Solana mint or 0x contract address>
+https://x.com/someproject
+https://someproject.fun
+dd this: github.com/someone/somerepo
 ```
 
-Python 3.9+, standard library only. `gh` (GitHub CLI) and `dig` are used when they're installed.
+The skill triggers on its own when you send a CA or a link. You can also call it by name with `/repo-dd`.
 
-| Key | Used for | Cost |
-|---|---|---|
-| `HELIUS_API_KEY` | Solana RPC and parsed history | free tier works |
-| `SOCIALDATA_API_KEY` | X search, profiles, posts | ~$0.0002 per item |
-| `ETHERSCAN_API_KEY` | EVM wallet history | free tier: Ethereum and Robinhood Chain |
-| `X_BEARER_TOKEN` | `xcheck.py`, `wallet_claim.py` | optional, X API pay-per-use |
+What happens next:
 
-Then send Claude a CA or a link. The skill triggers on its own, or you can call it with `/repo-dd`.
+1. **Within about 10 seconds, a first read.** Market cap, the deployer, who is posting the CA, and the one fact that matters most so far. Anything that changes the call (a serial launcher, a copycat of a bigger token, a bundle that already sold) is said the moment it is found.
+2. **In 10 to 80 seconds, the full card.** Every claim the project makes, each marked holds, partial, false or unverifiable, with the evidence. Plus the deployer and its funding, the first-bundle wallet tree, the website's builder platform, and whether the code is a copy.
+3. **Then a `TRIED` block.** Claude uses the product itself, up to the point of a wallet signature, and reports what would stop a new user, such as a broken flow or a capped payout.
+
+For a token with no tech behind it, ask "what's the narrative" instead. Claude pulls every X post naming the CA, biggest accounts first, with copy-paste bot posts collapsed into one line.
+
+## What it checks
+
+- **On-chain:** the deployer, its past launches and how they ended, who funded it, the first-bundle wallet tree and how much of it has sold, program upgrade authorities, and holder overlap with known team wallets. Solana, Base and Robinhood Chain.
+- **X:** every post and X Article from the project and the dev (Articles are fetched one by one, since they never show up in timeline APIs), who is posting the CA, bot-template shill waves, and "followed by" claims.
+- **Code:** what the repo does, how much of it is AI-written, spoofed commit times, and whether it is a scrubbed copy of someone else's project.
+- **Website:** Lovable, v0, Framer, n8n and other builder-platform fingerprints.
 
 ## Running the scripts directly
 
@@ -57,16 +87,31 @@ python3 dd.py <@handle | x.com link | CA | site>   # everything below, in parall
 python3 quick.py <CA>                              # market, copycats, X, deployer, in ~3s
 python3 ca_check.py <mint>                         # Solana deployer, past launches, funding
 python3 devwatch.py <mint> --once                  # first-bundle wallet tree, got vs holds now
+python3 fomo_share.py <CA>                         # share of supply in FOMO-app wallets
 python3 evm_relation.py <token> --chain base       # EVM deployer, dev %, holder scan
 python3 wallet_claim.py <addr> --person <handle>   # "deployed by <famous person>'s wallet"?
 python3 narrative.py <CA>                          # who is pushing the CA on X
 ```
 
-Leave out `--once` and `devwatch.py` keeps running and alerts when any wallet in the dev's tree sells. Set `NTFY_TOPIC` to get those alerts on your phone.
+Leave out `--once` and `devwatch.py` keeps running and alerts when any wallet in the dev's tree sells. Set `NTFY_TOPIC` in `.env` to get those alerts on your phone through [ntfy.sh](https://ntfy.sh).
+
+## Speed
+
+`bench/bench.py` runs `dd.py` on a list of inputs and logs when each section finished to `bench/results.jsonl`. Time until the full first wave finished, with empty caches:
+
+| Input | Before | After |
+|---|---|---|
+| X handle, CA in bio | 57s | 17s |
+| X handle, CA in posts | 18s | 11s |
+| Project website | 169s | 79s |
+| Bare CA | 53s | 15s |
+
+Three changes did most of it. Supply-share and wallet-tree lookups moved from Helius's enhanced API (2 calls per second) to `getTransactionsForAddress` (100 transactions per plain RPC call), and give identical results on the tokens tested. The chain checks now start from the X profile alone instead of waiting for every post to load. The wallet tree expands each level in parallel. On a Helius plan without `getTransactionsForAddress`, the scripts fall back to the old path automatically.
 
 ## Known limits
 
 - Base deployer funding: Etherscan's free tier no longer covers Base, and Base Blockscout is usually behind a Cloudflare challenge, so `evm_relation.py` reports funding as not checked.
+- On a free Helius key (about 10 calls per second), large wallet trees take about a minute.
 - `fomo_share.py` measures one trading app's wallets (fomo.family). Skip it if that flow doesn't matter to you.
 - None of this is financial advice. The card is a fast read on public evidence, and many claims can't be checked from outside.
 

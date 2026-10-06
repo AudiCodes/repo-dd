@@ -48,9 +48,8 @@ def is_mint(a):
     return bool(v) and isinstance(v["data"], dict) and v["data"].get("parsed", {}).get("type") == "mint"
 
 
-def x_account(handle):
-    """Profile, every post, and the full text of every X Article."""
-    u = socialdata(f"user/{handle}")
+def x_account(handle, u):
+    """Every post and the full text of every X Article -> (report, texts to search for a CA, linked urls)."""
     posts, cursor = [], None
     for _ in range(5):  # 20 a page; 100 posts covers any fresh launch account
         page = socialdata(f"user/{u['id_str']}/tweets-and-replies", **({"cursor": cursor} if cursor else {}))
@@ -70,7 +69,25 @@ def x_account(handle):
 
     with ThreadPoolExecutor(10) as ex:
         arts = [x for x in ex.map(article, posts) if x]
-    return u, posts, arts
+    joined = time.strftime("%Y-%m-%d %H:%M UTC", time.strptime(u["created_at"][:19], "%Y-%m-%dT%H:%M:%S"))
+    lines = [f"@{handle}: {u['followers_count']:,} followers, joined {joined}, {len(posts)} posts, {len(arts)} articles",
+             f"  bio: {(u.get('description') or '').replace(chr(10), ' ')}", f"  url: {u.get('url') or '-'}"]
+    for t in posts:
+        lines.append(f"  {t['tweet_created_at'][:16]}  {t.get('views_count') or 0:>7} views  {t['full_text'][:280].replace(chr(10), ' ')}")
+    d = f"{HERE}/data/dd/{handle}"
+    os.makedirs(d, exist_ok=True)
+    for title, body in arts:
+        p = f"{d}/{re.sub(r'[^A-Za-z0-9]+', '-', title)[:60]}.md"
+        open(p, "w").write(f"# {title}\n\n{body}\n")
+        lines.append(f"  ARTICLE {title!r}: {len(body.split())} words -> {p}")
+    texts = [*(t["full_text"] for t in posts), *(b for _, b in arts)]
+    urls = [x.get("expanded_url", "") for t in posts for x in (t.get("entities") or {}).get("urls", [])]
+    return "\n".join(lines), texts, urls
+
+
+def site_from(urls):
+    site = next((x for x in urls if x and not re.search(r"(x|twitter)\.com", x)), None)
+    return _safe(lambda: fetch(site)[2]) if site and "t.co/" in site else site
 
 
 def resolve(arg):
@@ -181,29 +198,15 @@ def say(title, body):
 
 def main():
     handle, ca, site = resolve(sys.argv[1])
-    texts = []
-    if handle:
-        u, posts, arts = x_account(handle)
-        joined = time.strftime("%Y-%m-%d %H:%M UTC", time.strptime(u["created_at"][:19], "%Y-%m-%dT%H:%M:%S"))
-        lines = [f"@{handle}: {u['followers_count']:,} followers, joined {joined}, {len(posts)} posts, {len(arts)} articles",
-                 f"  bio: {(u.get('description') or '').replace(chr(10), ' ')}", f"  url: {u.get('url') or '-'}"]
-        for t in posts:
-            lines.append(f"  {t['tweet_created_at'][:16]}  {t.get('views_count') or 0:>7} views  {t['full_text'][:280].replace(chr(10), ' ')}")
-        d = f"{HERE}/data/dd/{handle}"
-        os.makedirs(d, exist_ok=True)
-        for title, body in arts:
-            p = f"{d}/{re.sub(r'[^A-Za-z0-9]+', '-', title)[:60]}.md"
-            open(p, "w").write(f"# {title}\n\n{body}\n")
-            lines.append(f"  ARTICLE {title!r}: {len(body.split())} words -> {p}")
-        say("X", "\n".join(lines))
-        texts = [u.get("description") or "", *(t["full_text"] for t in posts), *(b for _, b in arts)]
-        expanded = [x.get("expanded_url", "") for t in posts for x in (t.get("entities") or {}).get("urls", [])]
-        ca = ca or ca_from(" ".join(texts))
-        site = site or next((x for x in [u.get("url"), *expanded] if x and not re.search(r"(x|twitter)\.com", x)), None)
-        if site and "t.co/" in site:
-            site = _safe(lambda: fetch(site)[2])
+    # the profile alone (~1s) usually carries the CA and the site, so the chain and site checks start
+    # from it while the posts and articles load
+    u = socialdata(f"user/{handle}") if handle else None
+    if u:
+        ca = ca or ca_from(u.get("description") or "")
+        site = site or site_from([u.get("url")])
     html = final = None
-    with ThreadPoolExecutor(6) as ex:
+    dev_done = False
+    with ThreadPoolExecutor(8) as ex:
         jobs = {}
 
         def start_ca_jobs():
@@ -213,8 +216,14 @@ def main():
                     jobs[ex.submit(script, "evm_relation.py", ca, "--chain", chain)] = f"EVM {chain}"
                     jobs[ex.submit(script, "fomo_share.py", ca, "--chain", chain)] = f"FOMO {chain}"
             else:
-                jobs[ex.submit(script, "devwatch.py", ca, "--once")] = "DEV TREE"  # FOMO waits for it: both use the 2/s enhanced API
+                jobs[ex.submit(script, "devwatch.py", ca, "--once")] = "DEV TREE"
+                jobs[ex.submit(script, "fomo_share.py", ca)] = "FOMO"  # plain RPC, so it no longer waits for the enhanced API
 
+        def start_programs():  # needs the site's html and the dev tree, whichever lands last
+            jobs[ex.submit(lambda: programs(html, final, f"{HERE}/data/devwatch/{ca}.json"))] = "PROGRAMS"
+
+        if u:
+            jobs[ex.submit(x_account, handle, u)] = "X"
         if site:
             jobs[ex.submit(site_check, site)] = "SITE"
         if ca:
@@ -228,18 +237,31 @@ def main():
                 except Exception as e:
                     say(name, f"failed: {e}")
                     continue
+                if name == "X":
+                    r, texts, urls = r
+                    if not ca:
+                        ca = ca_from(" ".join(texts))
+                        if ca:
+                            say("CA", f"from the posts: {ca}")
+                            start_ca_jobs()
+                    if not site:
+                        site = site_from(urls)
+                        if site:
+                            jobs[ex.submit(site_check, site)] = "SITE"
                 if name == "SITE":
                     r, html, final = r
                     if not ca:
                         ca = ca_from(html)
-                        say("CA", f"from the site: {ca}" if ca else "none on the site either")
+                        say("CA", f"from the site: {ca}" if ca else "none on the site")
                         if ca:
                             start_ca_jobs()
+                    elif dev_done:
+                        start_programs()
                 say(name, r)
                 if name == "DEV TREE":
-                    jobs[ex.submit(script, "fomo_share.py", ca)] = "FOMO"
+                    dev_done = True
                     if html:
-                        jobs[ex.submit(lambda: programs(html, final, f"{HERE}/data/devwatch/{ca}.json"))] = "PROGRAMS"
+                        start_programs()
     if not ca:
         say("CA", "none found in the bio, posts, articles or site")
     print(f"\nDONE [{time.time() - T0:.0f}s]  ca={ca}  site={site}")

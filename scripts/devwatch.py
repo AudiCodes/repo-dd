@@ -23,7 +23,9 @@ import urllib.request
 
 from ca_check import deployer as ca_deployer
 from fomo_share import on_curve
-from sol import b58decode, enhanced, pda, rpc, signatures
+from concurrent.futures import ThreadPoolExecutor
+
+from sol import b58decode, enhanced, history, pda, rpc, signatures
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MIN_SOL = 0.05
@@ -85,6 +87,34 @@ def node(parent, how, depth, addr):
 
 def links(addr, mint, limit=100):
     """(counterparty, how) for SOL >= MIN_SOL in/out and this token out, from addr's newest txs."""
+    page = history(addr, limit, encoding="jsonParsed")
+    if page is None:
+        return links_enhanced(addr, mint, limit)
+    out = []
+    for t in page["data"]:
+        keys = [k["pubkey"] for k in t["transaction"]["message"]["accountKeys"]]
+        accts = {keys[b["accountIndex"]]: b for b in t["meta"]["preTokenBalances"] + t["meta"]["postTokenBalances"]}
+        for i in t["transaction"]["message"]["instructions"] + [i for x in t["meta"]["innerInstructions"] for i in x["instructions"]]:
+            p, info = i.get("parsed"), (i.get("parsed") or {}).get("info", {}) if isinstance(i.get("parsed"), dict) else {}
+            if not isinstance(p, dict):
+                continue
+            if i["program"] == "system" and p["type"] in ("transfer", "transferWithSeed", "createAccount", "createAccountWithSeed") \
+                    and info["lamports"] >= MIN_SOL * 1e9:  # createAccount moves lamports too, and enhanced counts it
+                src, dst = info["source"], info.get("destination") or info["newAccount"]
+                if dst == addr and src != addr:
+                    out.append((src, f"sent {info['lamports'] / 1e9:.2f} SOL to"))
+                elif src == addr and dst != addr:
+                    out.append((dst, f"got {info['lamports'] / 1e9:.2f} SOL from"))
+            elif i["program"] == "spl-token" and p["type"] in ("transfer", "transferChecked"):
+                src, dst = accts.get(info["source"], {}), accts.get(info["destination"], {})
+                to = dst.get("owner")
+                if (info.get("mint") or src.get("mint")) == mint and (src.get("owner") or info.get("authority")) == addr and to not in (None, addr):
+                    amt = (info.get("tokenAmount") or {}).get("uiAmount") or int(info.get("amount", 0)) / 10 ** dst["uiTokenAmount"]["decimals"]
+                    out.append((to, f"got {amt:,.0f} tokens from"))
+    return [(a, how) for a, how in out if on_curve(a)]
+
+
+def links_enhanced(addr, mint, limit):
     out = []
     for t in enhanced(f"addresses/{addr}/transactions", limit=limit):
         for x in t.get("nativeTransfers", []):
@@ -104,15 +134,15 @@ def expand(tree, mint, depth):
     """Breadth-first from every non-busy node below depth. tree: addr -> {parent, how, depth, busy}."""
     frontier = [a for a, n in tree.items() if not n["busy"] and n["depth"] < depth]
     while frontier:
-        nxt = []
-        for a in frontier:
-            for b, how in links(a, mint):
-                if b in tree:
-                    continue
-                tree[b] = node(a, f"{how} {a[:6]}", tree[a]["depth"], b)
-                if not tree[b]["busy"] and tree[b]["depth"] < depth:
-                    nxt.append(b)
-        frontier = nxt
+        new = {}  # first parent to reach a wallet wins
+        with ThreadPoolExecutor(4) as ex:  # ~10 RPC calls/s on a free Helius key
+            for a, ls in zip(frontier, ex.map(lambda a: links(a, mint), frontier)):
+                for b, how in ls:
+                    if b not in tree and b not in new:
+                        new[b] = (a, f"{how} {a[:6]}")
+            for b, n in zip(new, ex.map(lambda b: node(new[b][0], new[b][1], tree[new[b][0]]["depth"], b), new)):
+                tree[b] = n
+        frontier = [b for b in new if not tree[b]["busy"] and tree[b]["depth"] < depth]
 
 
 def holders(mint):

@@ -1,0 +1,12 @@
+{"time": "2026-10-06T14:11:32", "label": "before", "input": "Deciroagent", "marks": {"X": 5.2, "SITE": 5.3, "QUICK": 7.0, "DEV TREE": 14.9, "PROGRAMS": 15.1, "FOMO": 18.1, "DONE": 18.1}}
+{"time": "2026-10-06T14:12:30", "label": "before", "input": "kortxfi", "marks": {"X": 6.2, "SITE": 6.6, "QUICK": 8.2, "DEV TREE": 12.6, "PROGRAMS": 13.4, "FOMO": 57.4, "DONE": 57.4}}
+{"time": "2026-10-06T14:15:19", "label": "before", "input": "https://equityperps.fun/", "marks": {"CA": 0.2, "SITE": 0.2, "QUICK": 3.2, "DEV TREE": 119.6, "PROGRAMS": 119.7, "FOMO": 169.0, "DONE": 169.0}}
+{"time": "2026-10-06T14:16:12", "label": "before", "input": "Cj4TSKUjUsaAPGYSoLLqT5xLfdRUVBU7rt5ooptpump", "marks": {"DEV TREE": 1.9, "QUICK": 2.2, "FOMO": 52.8, "DONE": 52.8}}
+{"time": "2026-10-06T14:22:38", "label": "fomo-rpc", "input": "Deciroagent", "marks": {"X": 5.2, "SITE": 5.5, "FOMO": 7.3, "QUICK": 7.5, "DEV TREE": 13.7, "DONE": 13.7}}
+{"time": "2026-10-06T14:22:59", "label": "fomo-rpc", "input": "kortxfi", "marks": {"X": 6.7, "SITE": 7.3, "QUICK": 8.9, "DEV TREE": 12.7, "PROGRAMS": 13.6, "FOMO": 20.3, "DONE": 20.3}}
+{"time": "2026-10-06T14:25:06", "label": "fomo-rpc", "input": "https://equityperps.fun/", "marks": {"CA": 0.2, "SITE": 0.2, "QUICK": 2.3, "FOMO": 23.3, "DEV TREE": 126.9, "PROGRAMS": 126.9, "DONE": 126.9}}
+{"time": "2026-10-06T14:25:19", "label": "fomo-rpc", "input": "Cj4TSKUjUsaAPGYSoLLqT5xLfdRUVBU7rt5ooptpump", "marks": {"DEV TREE": 1.6, "QUICK": 2.3, "FOMO": 13.6, "DONE": 13.6}}
+{"time": "2026-10-06T14:30:31", "label": "after", "input": "Deciroagent", "marks": {"SITE": 0.9, "CA": 4.5, "X": 4.5, "QUICK": 7.1, "FOMO": 7.4, "DEV TREE": 11.2, "DONE": 11.2}}
+{"time": "2026-10-06T14:30:48", "label": "after", "input": "kortxfi", "marks": {"SITE": 1.2, "QUICK": 3.2, "X": 6.5, "DEV TREE": 8.8, "PROGRAMS": 9.7, "FOMO": 17.4, "DONE": 17.4}}
+{"time": "2026-10-06T14:32:07", "label": "after", "input": "https://equityperps.fun/", "marks": {"CA": 0.2, "SITE": 0.3, "QUICK": 2.0, "FOMO": 45.2, "DEV TREE": 78.7, "PROGRAMS": 78.8, "DONE": 78.8}}
+{"time": "2026-10-06T14:32:22", "label": "after", "input": "Cj4TSKUjUsaAPGYSoLLqT5xLfdRUVBU7rt5ooptpump", "marks": {"DEV TREE": 1.8, "QUICK": 3.1, "FOMO": 15.4, "DONE": 15.4}}

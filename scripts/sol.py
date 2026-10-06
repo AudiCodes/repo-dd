@@ -4,12 +4,14 @@ Measured on a Helius developer key: RPC takes 30+ parallel calls; the enhanced A
 2/s sustained (bursts of ~5 pass); batch POSTs are refused. So:
   rpc()        Helius, and on a 429 the same call goes to the public mainnet RPC instead of waiting.
   enhanced()   token bucket (burst 5, then 2/s) across all threads and processes (file lock), so it never trips the limit.
+  history()    getTransactionsForAddress: 100 full txs per plain-RPC call, ~4x the enhanced API; None if the plan lacks it.
   signatures() plain-RPC paging, 1000 per call: use it for counts and the oldest tx, never enhanced pages.
 """
 import fcntl
 import hashlib
 import json
 import os
+import random
 import time
 import urllib.error
 import urllib.request
@@ -19,6 +21,7 @@ from env import key
 KEY = key("HELIUS_API_KEY")
 HELIUS = f"https://mainnet.helius-rpc.com/?api-key={KEY}"
 PUBLIC = "https://api.mainnet-beta.solana.com"
+HELIUS_ONLY = {"getTransactionsForAddress"}
 ENHANCED_PER_SEC, BURST = 2, 5
 
 PACE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", ".enhanced_pace")  # shared by every process
@@ -48,8 +51,9 @@ def _open(url, body=None):
 
 def rpc(method, params):
     body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    for attempt in range(4):
-        for url in (HELIUS, PUBLIC):
+    urls = (HELIUS,) if method in HELIUS_ONLY else (HELIUS, PUBLIC)
+    for attempt in range(8):
+        for url in urls:
             try:
                 r = _open(url, body)
                 if "error" not in r or r["error"].get("code") != 429:
@@ -57,7 +61,7 @@ def rpc(method, params):
             except urllib.error.HTTPError as e:
                 if e.code != 429:
                     raise
-        time.sleep(0.3 * (attempt + 1))
+        time.sleep(0.3 * 2 ** min(attempt, 4) * (0.5 + random.random()))  # jitter, so parallel callers don't retry in lockstep
     raise RuntimeError(f"{method}: rate limited on Helius and public RPC")
 
 
@@ -121,3 +125,10 @@ def pda(seeds, program):
         h = hashlib.sha256(b"".join(seeds) + bytes([bump]) + b58decode(program) + b"ProgramDerivedAddress").digest()
         if not on_curve(h):
             return b58encode(h)
+
+
+def history(address, limit=100, token=None, encoding="json"):
+    """One page of succeeded txs, newest first: {"data": [...], "paginationToken": ...}, or None if the key lacks the method."""
+    return rpc("getTransactionsForAddress", [address, {
+        "transactionDetails": "full", "limit": limit, "encoding": encoding, "maxSupportedTransactionVersion": 1,
+        "filters": {"status": "succeeded"}, **({"paginationToken": token} if token else {})}])
